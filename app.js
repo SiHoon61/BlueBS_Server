@@ -20,7 +20,7 @@ app.use(cookieParser());
 const cors = require('cors');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors({
-    origin: 'http://10.114.10.20:3000',
+    origin: CLIENT_URL,
     optionsSuccessStatus: 200,
     credentials: true,
 }));
@@ -172,7 +172,7 @@ app.get('/reference', (req, res) => {
                     pdf: row.pdf ? row.pdf.toString('base64') : null,
                     pdfName: row.pdfName
                 },
-                previous:{ id: row.previous_id, title: row.previous_title },
+                previous: { id: row.previous_id, title: row.previous_title },
                 next: { id: row.next_id, title: row.next_title }
             };
 
