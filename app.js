@@ -73,11 +73,6 @@ app.post('/logout', (req, res) => {
     res.json({ message: 'Logout successful' });
 });
 
-const port = 5000;
-app.listen(port, () => {
-    console.log(`Example app listening on port ${port}`)
-})
-
 //기본 이미지 설정
 const getDefaultImage = () => {
     const defaultImagePath = path.join(__dirname, 'public', 'blackLogo.png');
@@ -245,3 +240,11 @@ app.delete('/delete', (req, res) => {
     });
     stmt.finalize();
 });
+
+
+const port = 3000;
+app.listen(port, () => {
+    console.log(`Example app listening on port ${port}`)
+})
+
+module.exports = app;
