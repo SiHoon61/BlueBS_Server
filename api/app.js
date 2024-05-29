@@ -20,7 +20,7 @@ app.use(cookieParser());
 const cors = require('cors');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors({
-    origin: CLIENT_URL,
+    origin: process.env.CLIENT_URL,
     optionsSuccessStatus: 200,
     credentials: true,
 }));
