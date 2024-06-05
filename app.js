@@ -58,7 +58,7 @@ app.get('/verifyToken', (req, res) => {
     const secretKey = process.env.JWT_SECRET;
     jwt.verify(token, secretKey, (err, decoded) => {
         if (err) {
-            return res.status(401).json({ message: 'Invalid token' });
+            return res.status(401).json({ message: 'Invalid token!!' });
         }
 
         return res.json({ message: 'Token is valid', user: decoded });
