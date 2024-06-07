@@ -9,6 +9,9 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
+//vercel postgres
+import { Client } from "@vercel/postgres";
+
 dotenv.config();
 
 const app = express();
@@ -81,32 +84,57 @@ const getDefaultImage = () => {
 
 //파일 업로드
 const upload = multer({ storage: multer.memoryStorage() });
-const db = new sqlite3.Database('bluebsDB.db', (err) => {
+const client = new Client();
+client.connect(err => {
     if (err) {
-        return console.error('Error opening database:', err.message);
+        console.error('PostgreSQL 연결 오류:', err.message);
+    } else {
+        console.log('PostgreSQL 데이터베이스에 연결되었습니다.');
     }
-    console.log('Connected to the in-memory SQLite database.');
 });
+// const db = new sqlite3.Database('bluebsDB.db', (err) => {
+//     if (err) {
+//         return console.error('Error opening database:', err.message);
+//     }
+//     console.log('Connected to the in-memory SQLite database.');
+// });
 
 app.post('/upload', upload.fields([
     { name: 'pdf', maxCount: 1 },
     { name: 'jpg', maxCount: 1 }
-]), (req, res) => {
-    console.log(req.body);
-    const { title, writer, content, date, pdfName } = req.body;
-    const pdf = req.files['pdf'] ? req.files['pdf'][0].buffer : null;
-    const jpg = req.files['jpg'] ? req.files['jpg'][0].buffer : getDefaultImage();
+]), async (req, res) => {
+    try {
+        console.log(req.body);
+        const { title, writer, content, date, pdfName } = req.body;
+        const pdf = req.files['pdf'] ? req.files['pdf'][0].buffer : null;
+        const jpg = req.files['jpg'] ? req.files['jpg'][0].buffer : getDefaultImage();
 
-    const stmt = db.prepare('INSERT INTO reference (title, writer, content, date, pdf, jpg, pdfName) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    stmt.run(title, writer, content, date, pdf, jpg, pdfName, function (err) {
-        if (err) {
-            console.error('Error storing data in database:', err);
-            res.status(500).json({ message: 'Internal server error' });
-        } else {
-            res.json({ message: 'Data uploaded successfully', postId: this.lastID });
-        }
-    });
-    stmt.finalize();
+        const query = `
+            INSERT INTO reference (title, writer, content, date, pdf, jpg, pdfName) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
+        `;
+
+        const values = [title, writer, content, date, pdf, jpg, pdfName];
+
+        const result = await client.query(query, values);
+
+        res.json({ message: '데이터가 성공적으로 업로드되었습니다', postId: result.rows[0].id });
+    } catch (err) {
+        console.error('데이터베이스에 데이터 저장 오류:', err);
+        res.status(500).json({ message: '서버 내부 오류' });
+    }
+    //SQLite 쿼리문
+    // const stmt = db.prepare('INSERT INTO reference (title, writer, content, date, pdf, jpg, pdfName) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    // stmt.run(title, writer, content, date, pdf, jpg, pdfName, function (err) {
+    //     if (err) {
+    //         console.error('Error storing data in database:', err);
+    //         res.status(500).json({ message: 'Internal server error' });
+    //     } else {
+    //         res.json({ message: 'Data uploaded successfully', postId: this.lastID });
+    //     }
+    // });
+    // stmt.finalize();
 });
 
 //dataRoom으로 전체 데이터 보내기
