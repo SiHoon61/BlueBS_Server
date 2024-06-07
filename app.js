@@ -92,12 +92,12 @@ client.connect(err => {
         console.log('PostgreSQL 데이터베이스에 연결되었습니다.');
     }
 });
-// const db = new sqlite3.Database('bluebsDB.db', (err) => {
-//     if (err) {
-//         return console.error('Error opening database:', err.message);
-//     }
-//     console.log('Connected to the in-memory SQLite database.');
-// });
+const db = new sqlite3.Database('bluebsDB.db', (err) => {
+    if (err) {
+        return console.error('Error opening database:', err.message);
+    }
+    console.log('Connected to the in-memory SQLite database.');
+});
 
 app.post('/upload', upload.fields([
     { name: 'pdf', maxCount: 1 },
