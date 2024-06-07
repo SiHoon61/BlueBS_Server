@@ -1,26 +1,25 @@
-require('dotenv').config();
-const express = require('express');
-const bodyParser = require('body-parser');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const dotenv = require('dotenv');
-const multer = require('multer');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
+import dotenv from 'dotenv';
+import express from 'express';
+import bodyParser from 'body-parser';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import { sql } from '@vercel/postgres';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
 
-//vercel postgres
-import { sql } from "@vercel/postgres";
+// 파일의 현재 디렉토리를 구하기 위해 필요합니다.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
-const cookieParser = require('cookie-parser');
-
 app.use(cookieParser());
-
-const cors = require('cors');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors({
     origin: process.env.CLIENT_URL,
@@ -29,7 +28,8 @@ app.use(cors({
 }));
 
 const encryptedPW = bcrypt.hashSync(process.env.ADMIN_PW, 8);
-//로그인
+
+// 로그인
 app.post('/login', async (req, res) => {
     try {
         if ((process.env.ADMIN_ID === req.body.id) && (bcrypt.compareSync(req.body.pw, encryptedPW))) {
@@ -41,9 +41,8 @@ app.post('/login', async (req, res) => {
                 code: 200,
                 message: "token is created",
                 token: token
-            })
-        }
-        else {
+            });
+        } else {
             throw new Error('아이디와 비밀번호를 확인해주세요');
         }
     } catch (err) {
@@ -51,7 +50,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
-//쿠키 검증
+// 쿠키 검증
 app.get('/verifyToken', (req, res) => {
     const token = req.cookies.token;
 
@@ -68,7 +67,7 @@ app.get('/verifyToken', (req, res) => {
     });
 });
 
-//로그아웃
+// 로그아웃
 app.post('/logout', (req, res) => {
     res.clearCookie('token', {
         httpOnly: true, sameSite: "none", secure: true
@@ -76,20 +75,14 @@ app.post('/logout', (req, res) => {
     res.json({ message: 'Logout successful' });
 });
 
-//기본 이미지 설정
+// 기본 이미지 설정
 const getDefaultImage = () => {
     const defaultImagePath = path.join(__dirname, 'public', 'blackLogo.png');
     return fs.readFileSync(defaultImagePath);
 };
 
-//파일 업로드
+// 파일 업로드
 const upload = multer({ storage: multer.memoryStorage() });
-const db = new sqlite3.Database('bluebsDB.db', (err) => {
-    if (err) {
-        return console.error('Error opening database:', err.message);
-    }
-    console.log('Connected to the in-memory SQLite database.');
-});
 
 app.post('/upload', upload.fields([
     { name: 'pdf', maxCount: 1 },
@@ -101,82 +94,63 @@ app.post('/upload', upload.fields([
         const pdf = req.files['pdf'] ? req.files['pdf'][0].buffer : null;
         const jpg = req.files['jpg'] ? req.files['jpg'][0].buffer : getDefaultImage();
 
-        const query = `
+        const { rows } = await sql`
             INSERT INTO reference (title, writer, content, date, pdf, jpg, pdfName) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES (${title}, ${writer}, ${content}, ${date}, ${pdf}, ${jpg}, ${pdfName})
             RETURNING id
         `;
 
-        const values = [title, writer, content, date, pdf, jpg, pdfName];
-
-        const result = await sql.query(query, values);
-
-        res.json({ message: '데이터가 성공적으로 업로드되었습니다', postId: result.rows[0].id });
+        res.json({ message: '데이터가 성공적으로 업로드되었습니다', postId: rows[0].id });
     } catch (err) {
         console.error('데이터베이스에 데이터 저장 오류:', err);
         res.status(500).json({ message: '서버 내부 오류' });
     }
-    //SQLite 쿼리문
-    // const stmt = db.prepare('INSERT INTO reference (title, writer, content, date, pdf, jpg, pdfName) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    // stmt.run(title, writer, content, date, pdf, jpg, pdfName, function (err) {
-    //     if (err) {
-    //         console.error('Error storing data in database:', err);
-    //         res.status(500).json({ message: 'Internal server error' });
-    //     } else {
-    //         res.json({ message: 'Data uploaded successfully', postId: this.lastID });
-    //     }
-    // });
-    // stmt.finalize();
 });
 
-//dataRoom으로 전체 데이터 보내기
-app.get('/dataroom', (req, res) => {
-    db.all('SELECT id, title, date, jpg FROM reference', [], (err, rows) => {
-        if (err) {
-            console.error('Error retrieving data from database:', err);
-            res.status(500).json({ message: 'Internal server error' });
-        } else {
-            // jpg 필드를 base64 인코딩하여 전달
-            const formattedRows = rows.map(row => ({
-                ...row,
-                jpg: row.jpg ? row.jpg.toString('base64') : null
-            }));
-            res.json(formattedRows);
-        }
-    });
+// dataRoom으로 전체 데이터 보내기
+app.get('/dataroom', async (req, res) => {
+    try {
+        const { rows } = await sql`SELECT id, title, date, jpg FROM reference`;
+        const formattedRows = rows.map(row => ({
+            ...row,
+            jpg: row.jpg ? row.jpg.toString('base64') : null
+        }));
+        res.json(formattedRows);
+    } catch (err) {
+        console.error('Error retrieving data from database:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
 });
 
-//쿼리 파라미터로 데이터 보내기
-app.get('/reference', (req, res) => {
+// 쿼리 파라미터로 데이터 보내기
+app.get('/reference', async (req, res) => {
     const id = parseInt(req.query.id, 10);
 
-    const query = `
-        WITH reference_with_navigation AS (
-            SELECT
-            id,
-            title,
-            writer,
-            content,
-            pdfName,
-            date,
-            LAG(id) OVER (ORDER BY id) AS previous_id,
-            LAG(title) OVER (ORDER BY id) AS previous_title,
-            LEAD(id) OVER (ORDER BY id) AS next_id,
-            LEAD(title) OVER (ORDER BY id) AS next_title
-        FROM reference
-    )
-    SELECT *
-    FROM reference_with_navigation
-    WHERE id = ?;
-    `;
+    try {
+        const { rows } = await sql`
+            WITH reference_with_navigation AS (
+                SELECT
+                    id,
+                    title,
+                    writer,
+                    content,
+                    pdfName,
+                    date,
+                    LAG(id) OVER (ORDER BY id) AS previous_id,
+                    LAG(title) OVER (ORDER BY id) AS previous_title,
+                    LEAD(id) OVER (ORDER BY id) AS next_id,
+                    LEAD(title) OVER (ORDER BY id) AS next_title
+                FROM reference
+            )
+            SELECT *
+            FROM reference_with_navigation
+            WHERE id = ${id};
+        `;
 
-    db.get(query, [id], (err, row) => {
-        if (err) {
-            console.error('Error retrieving data from database:', err);
-            res.status(500).json({ message: 'Internal server error' });
-        } else if (!row) {
+        if (rows.length === 0) {
             res.status(404).json({ message: 'Post not found' });
         } else {
+            const row = rows[0];
             const response = {
                 current: {
                     id: row.id,
@@ -190,56 +164,50 @@ app.get('/reference', (req, res) => {
                 previous: { id: row.previous_id, title: row.previous_title },
                 next: { id: row.next_id, title: row.next_title }
             };
-
             res.json(response);
         }
-    });
+    } catch (err) {
+        console.error('Error retrieving data from database:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
 });
 
-//파일 수정하기
+// 파일 수정하기
 app.patch('/fixref', upload.fields([
     { name: 'pdf', maxCount: 1 },
     { name: 'jpg', maxCount: 1 }
-]), (req, res) => {
+]), async (req, res) => {
     console.log(req.body);
     const id = parseInt(req.query.id, 10);
     const { title, writer, content, pdfName, keepPDF, keepJPG } = req.body;
 
+    try {
+        const { rows } = await sql`SELECT pdf, jpg, pdfName FROM reference WHERE id = ${id}`;
 
-    // 현재 데이터 가져오기
-    db.get('SELECT pdf, jpg, pdfName FROM reference WHERE id = ?', [id], (err, row) => {
-        if (err) {
-            console.error('Error retrieving data from database:', err);
-            res.status(500).json({ message: 'Internal server error' });
-            return;
-        }
-
-        if (!row) {
+        if (rows.length === 0) {
             res.status(404).json({ message: 'Post not found' });
             return;
         }
 
-        // 파일 업데이트 처리
+        const row = rows[0];
         const pdf = req.files['pdf'] ? req.files['pdf'][0].buffer : (keepPDF ? row.pdf : null);
         const jpg = req.files['jpg'] ? req.files['jpg'][0].buffer : (keepJPG ? row.jpg : getDefaultImage());
         const name = pdfName ? pdfName : (keepPDF ? row.pdfName : "");
 
-        // 데이터 업데이트
-        const stmt = db.prepare('UPDATE reference SET title = ?, writer = ?, content = ?, pdf = ?, jpg = ?, pdfName = ? WHERE id = ?');
-        stmt.run(title, writer, content, pdf, jpg, name, id, function (err) {
-            if (err) {
-                console.error('Error updating data in database:', err);
-                res.status(500).json({ message: 'Internal server error' });
-            } else {
-                res.json({ message: 'Data updated successfully' });
-            }
-        });
-        stmt.finalize();
-    });
+        await sql`
+            UPDATE reference
+            SET title = ${title}, writer = ${writer}, content = ${content}, pdf = ${pdf}, jpg = ${jpg}, pdfName = ${name}
+            WHERE id = ${id}
+        `;
+        res.json({ message: 'Data updated successfully' });
+    } catch (err) {
+        console.error('Error updating data in database:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
 });
 
 // 데이터 삭제
-app.delete('/delete', (req, res) => {
+app.delete('/delete', async (req, res) => {
     const id = parseInt(req.query.id, 10);
 
     if (isNaN(id)) {
@@ -247,24 +215,22 @@ app.delete('/delete', (req, res) => {
         return;
     }
 
-    const stmt = db.prepare('DELETE FROM reference WHERE id = ?');
-    stmt.run(id, function (err) {
-        if (err) {
-            console.error('Error deleting data from database:', err);
-            res.status(500).json({ message: 'Internal server error' });
-        } else if (this.changes === 0) {
+    try {
+        const result = await sql`DELETE FROM reference WHERE id = ${id}`;
+        if (result.rowCount === 0) {
             res.status(404).json({ message: 'No record found with the provided ID' });
         } else {
             res.json({ message: 'Record deleted successfully' });
         }
-    });
-    stmt.finalize();
+    } catch (err) {
+        console.error('Error deleting data from database:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
 });
-
 
 const port = 3000;
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
-})
+});
 
-module.exports = app;
+export default app;
