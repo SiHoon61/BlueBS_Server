@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 
 //vercel postgres
-import { Client } from "@vercel/postgres";
+import { sql } from "@vercel/postgres";
 
 dotenv.config();
 
@@ -84,14 +84,6 @@ const getDefaultImage = () => {
 
 //파일 업로드
 const upload = multer({ storage: multer.memoryStorage() });
-const client = new Client();
-client.connect(err => {
-    if (err) {
-        console.error('PostgreSQL 연결 오류:', err.message);
-    } else {
-        console.log('PostgreSQL 데이터베이스에 연결되었습니다.');
-    }
-});
 const db = new sqlite3.Database('bluebsDB.db', (err) => {
     if (err) {
         return console.error('Error opening database:', err.message);
@@ -117,7 +109,7 @@ app.post('/upload', upload.fields([
 
         const values = [title, writer, content, date, pdf, jpg, pdfName];
 
-        const result = await client.query(query, values);
+        const result = await sql.query(query, values);
 
         res.json({ message: '데이터가 성공적으로 업로드되었습니다', postId: result.rows[0].id });
     } catch (err) {
