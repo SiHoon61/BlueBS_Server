@@ -36,7 +36,7 @@ app.post('/login', async (req, res) => {
             const payload = { userId: req.body.id };
             const secretKey = process.env.JWT_SECRET;
             const token = jwt.sign(payload, secretKey, { expiresIn: "1200m" });
-            res.cookie('token', token, { httpOnly: true, sameSite: "none", secure: true, maxAge: 36000 });
+            res.cookie('token', token, { httpOnly: true, sameSite: "none", secure: true, maxAge: 36000000 });
             res.json({
                 code: 200,
                 message: "token is created",
