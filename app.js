@@ -110,7 +110,7 @@ app.post('/upload', upload.fields([
 // dataRoom으로 전체 데이터 보내기
 app.get('/dataroom', async (req, res) => {
     try {
-        const { rows } = await sql`SELECT id, title, date, jpg FROM reference`;
+        const { rows } = await sql`SELECT (id, title, date, jpg) FROM reference`;
         const formattedRows = rows.map(row => ({
             ...row,
             jpg: row.jpg ? row.jpg.toString('base64') : null
