@@ -1,18 +1,15 @@
-//mySQL적용 전 버전 커밋
-//현재는 vercel의 자체 sql사용 중
-
 import dotenv from 'dotenv';
 import express from 'express';
 import bodyParser from 'body-parser';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
-import { sql } from '@vercel/postgres';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import pool from './config/db.js'; 
 
 // 파일의 현재 디렉토리를 구하기 위해 필요합니다.
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +21,8 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// CORS
 app.use(cors({
     origin: process.env.CLIENT_URL,
     optionsSuccessStatus: 200,
@@ -97,13 +96,12 @@ app.post('/upload', upload.fields([
         const pdf = req.files['pdf'] ? req.files['pdf'][0].buffer : null;
         const jpg = req.files['jpg'] ? req.files['jpg'][0].buffer : getDefaultImage();
 
-        const { rows } = await sql`
-            INSERT INTO reference (title, writer, content, date, pdf, jpg, pdfName) 
-            VALUES (${title}, ${writer}, ${content}, ${date}, ${pdf}, ${jpg}, ${pdfName})
-            RETURNING id
-        `;
+        const [result] = await pool.query(
+            'INSERT INTO reference (title, writer, content, date, pdf, jpg, pdfName) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [title, writer, content, date, pdf, jpg, pdfName]
+        );
 
-        res.json({ message: '데이터가 성공적으로 업로드되었습니다', postId: rows[0].id });
+        res.json({ message: '데이터가 성공적으로 업로드되었습니다', postId: result.insertId });
     } catch (err) {
         console.error('데이터베이스에 데이터 저장 오류:', err);
         res.status(500).json({ message: '서버 내부 오류' });
@@ -113,7 +111,7 @@ app.post('/upload', upload.fields([
 // dataRoom으로 전체 데이터 보내기
 app.get('/dataroom', async (req, res) => {
     try {
-        const { rows } = await sql`SELECT (id, title, date, jpg) FROM reference`;
+        const [rows] = await pool.query('SELECT id, title, date, jpg FROM reference');
         const formattedRows = rows.map(row => ({
             ...row,
             jpg: row.jpg ? row.jpg.toString('base64') : null
@@ -130,25 +128,29 @@ app.get('/reference', async (req, res) => {
     const id = parseInt(req.query.id, 10);
 
     try {
-        const { rows } = await sql`
-            WITH reference_with_navigation AS (
-                SELECT
-                    id,
-                    title,
-                    writer,
-                    content,
-                    pdfName,
-                    date,
-                    LAG(id) OVER (ORDER BY id) AS previous_id,
-                    LAG(title) OVER (ORDER BY id) AS previous_title,
-                    LEAD(id) OVER (ORDER BY id) AS next_id,
-                    LEAD(title) OVER (ORDER BY id) AS next_title
-                FROM reference
+        const [rows] = await pool.query(
+            `SELECT
+                r1.id,
+                r1.title,
+                r1.writer,
+                r1.content,
+                r1.pdfName,
+                r1.date,
+                r1.pdf,
+                r1.jpg,
+                r2.id AS previous_id,
+                r2.title AS previous_title,
+                r3.id AS next_id,
+                r3.title AS next_title
+            FROM reference r1
+            LEFT JOIN reference r2 ON r2.id = (
+                SELECT MAX(id) FROM reference WHERE id < r1.id
             )
-            SELECT *
-            FROM reference_with_navigation
-            WHERE id = ${id};
-        `;
+            LEFT JOIN reference r3 ON r3.id = (
+                SELECT MIN(id) FROM reference WHERE id > r1.id
+            )
+            WHERE r1.id = ?`, [id]
+        );
 
         if (rows.length === 0) {
             res.status(404).json({ message: 'Post not found' });
@@ -185,7 +187,7 @@ app.patch('/fixref', upload.fields([
     const { title, writer, content, pdfName, keepPDF, keepJPG } = req.body;
 
     try {
-        const { rows } = await sql`SELECT pdf, jpg, pdfName FROM reference WHERE id = ${id}`;
+        const [rows] = await pool.query('SELECT pdf, jpg, pdfName FROM reference WHERE id = ?', [id]);
 
         if (rows.length === 0) {
             res.status(404).json({ message: 'Post not found' });
@@ -197,11 +199,10 @@ app.patch('/fixref', upload.fields([
         const jpg = req.files['jpg'] ? req.files['jpg'][0].buffer : (keepJPG ? row.jpg : getDefaultImage());
         const name = pdfName ? pdfName : (keepPDF ? row.pdfName : "");
 
-        await sql`
-            UPDATE reference
-            SET title = ${title}, writer = ${writer}, content = ${content}, pdf = ${pdf}, jpg = ${jpg}, pdfName = ${name}
-            WHERE id = ${id}
-        `;
+        await pool.query(
+            'UPDATE reference SET title = ?, writer = ?, content = ?, pdf = ?, jpg = ?, pdfName = ? WHERE id = ?',
+            [title, writer, content, pdf, jpg, name, id]
+        );
         res.json({ message: 'Data updated successfully' });
     } catch (err) {
         console.error('Error updating data in database:', err);
@@ -219,8 +220,8 @@ app.delete('/delete', async (req, res) => {
     }
 
     try {
-        const result = await sql`DELETE FROM reference WHERE id = ${id}`;
-        if (result.rowCount === 0) {
+        const [result] = await pool.query('DELETE FROM reference WHERE id = ?', [id]);
+        if (result.affectedRows === 0) {
             res.status(404).json({ message: 'No record found with the provided ID' });
         } else {
             res.json({ message: 'Record deleted successfully' });
@@ -231,7 +232,7 @@ app.delete('/delete', async (req, res) => {
     }
 });
 
-const port = 3000;
+const port = 3001;
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
 });
