@@ -1,3 +1,6 @@
+//mySQL적용 전 버전 커밋
+//현재는 vercel의 자체 sql사용 중
+
 import dotenv from 'dotenv';
 import express from 'express';
 import bodyParser from 'body-parser';
