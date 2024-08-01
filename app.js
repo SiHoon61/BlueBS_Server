@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import pool from './config/db.js'; 
+import initializeDatabase from './config/initializeDatabase.js';
 
 // 파일의 현재 디렉토리를 구하기 위해 필요합니다.
 const __filename = fileURLToPath(import.meta.url);
@@ -30,6 +31,7 @@ app.use(cors({
 }));
 
 const encryptedPW = bcrypt.hashSync(process.env.ADMIN_PW, 8);
+initializeDatabase();
 
 // 로그인
 app.post('/login', async (req, res) => {
