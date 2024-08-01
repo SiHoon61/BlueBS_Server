@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-import pool from './config/db.js'; 
+import pool from './config/db.js';
 import initializeDatabase from './config/initializeDatabase.js';
 
 // 파일의 현재 디렉토리를 구하기 위해 필요합니다.
@@ -234,7 +234,7 @@ app.delete('/delete', async (req, res) => {
     }
 });
 
-const port = 3001;
+const port = process.env.PORT || 3001;
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
 });
