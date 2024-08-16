@@ -24,8 +24,15 @@ app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // CORS
+const allowedOrigins = [process.env.CLIENT_URL1, process.env.CLIENT_URL2];
 app.use(cors({
-    origin: process.env.CLIENT_URL,
+    origin: (origin, callback) => {
+        if (allowedOrigins.includes(origin) || !origin) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     optionsSuccessStatus: 200,
     credentials: true,
 }));
